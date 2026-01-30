@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, BufferedInputFile
+from aiogram.filters import Command
 from datetime import datetime
 
 import database as db
@@ -76,4 +77,5 @@ async def export_data(callback: CallbackQuery):
     )
     
     await callback.message.answer_document(file, caption="📤 Ваши подписки")
+
     await callback.answer()
