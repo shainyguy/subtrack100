@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, BufferedInputFile
+from aiogram.filters import Command
 from datetime import datetime
 
 import database as db
@@ -152,4 +153,5 @@ async def monthly_report(callback: CallbackQuery):
 
 @router.callback_query(F.data == "back_analytics")
 async def back_to_analytics(callback: CallbackQuery):
+
     await show_analytics(callback)
