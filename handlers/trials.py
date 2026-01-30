@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime, timedelta
@@ -202,6 +203,7 @@ async def trial_to_subscription(callback: CallbackQuery):
         reply_markup=main_menu(),
         parse_mode="HTML"
     )
+
 
 
 from aiogram.filters import Command
