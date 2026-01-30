@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
+from aiogram.filters import Command
 
 import database as db
 from config import ACHIEVEMENTS, get_level
@@ -47,4 +48,5 @@ async def show_achievements(callback: CallbackQuery):
             ach = ACHIEVEMENTS[ach_id]
             text += f"• {ach['icon']} {ach['title']} — {ach['desc']}\n"
     
+
     await callback.message.edit_text(text, reply_markup=main_menu(), parse_mode="HTML")
