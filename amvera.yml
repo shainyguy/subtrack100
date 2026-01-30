@@ -1,0 +1,12 @@
+meta:
+  environment: python
+  toolchain:
+    name: pip
+    version: "3.11"
+
+build:
+  dockerfile: Dockerfile
+
+run:
+  persistenceMount: /app/data
+  containerPort: 8080
