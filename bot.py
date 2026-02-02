@@ -6,9 +6,11 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
+from pathlib import Path
 import uvicorn
 
 from config import BOT_TOKEN
@@ -18,6 +20,9 @@ from handlers import start, subscriptions, trials, analytics, achievements, sett
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Путь к статическим файлам
+STATIC_DIR = Path(__file__).parent / "static"
 
 # ========== PYDANTIC MODELS ==========
 
@@ -60,7 +65,6 @@ async def lifespan(app: FastAPI):
     await db.init_db()
     logger.info("✅ Database initialized")
     
-    # Запуск бота в фоне
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     
@@ -76,6 +80,7 @@ async def lifespan(app: FastAPI):
     
     polling_task = asyncio.create_task(dp.start_polling(bot))
     logger.info("🚀 Bot started")
+    logger.info(f"📱 Mini App ready at /app")
     
     yield
     
@@ -93,11 +98,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ========== API ROUTES ==========
+# ========== MINI APP ==========
 
-@app.get("/")
-async def root():
-    return {"status": "ok", "app": "SubTracker"}
+@app.get("/", response_class=HTMLResponse)
+async def root_page():
+    """Главная страница — Mini App"""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return HTMLResponse("<h1>SubTrack</h1><p>Mini App not found. Check /static/index.html</p>")
+
+@app.get("/app", response_class=HTMLResponse)
+async def mini_app():
+    """Mini App страница"""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return HTMLResponse("<h1>Mini App not found</h1>")
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "app": "SubTracker", "mini_app": "ready"}
+
+# ========== API ROUTES ==========
 
 @app.post("/api/auth")
 async def auth(data: UserAuth):
@@ -217,7 +240,147 @@ async def check_duplicates(user_id: int):
     
     return {"issues": issues, "total_saving": sum(i['saving'] for i in issues)}
 
+# ========== CANCEL GUIDES ==========
+
+CANCEL_GUIDES = {
+    'яндекс плюс': {
+        'steps': [
+            'Откройте plus.yandex.ru или приложение Яндекс',
+            'Нажмите на иконку профиля',
+            'Выберите "Управление подпиской"',
+            'Нажмите "Отменить подписку"',
+            'Подтвердите отмену'
+        ],
+        'note': 'Подписка будет активна до конца оплаченного периода.'
+    },
+    'кинопоиск': {
+        'steps': [
+            'Откройте kinopoisk.ru',
+            'Перейдите в профиль → Настройки',
+            'Найдите раздел "Подписка"',
+            'Нажмите "Отменить"'
+        ],
+        'note': 'Если подписка через Яндекс Плюс — отменяйте там.'
+    },
+    'spotify': {
+        'steps': [
+            'Откройте spotify.com/account',
+            'Войдите в аккаунт',
+            'Нажмите "Управление подпиской"',
+            'Выберите "Отменить Premium"'
+        ],
+        'note': 'Отмена только через сайт! В приложении нельзя.'
+    },
+    'youtube premium': {
+        'steps': [
+            'Откройте youtube.com/paid_memberships',
+            'Войдите в аккаунт',
+            'Нажмите "Управление"',
+            'Выберите "Отменить подписку"'
+        ],
+        'note': 'Можно приостановить до 6 месяцев вместо отмены.'
+    },
+    'netflix': {
+        'steps': [
+            'Откройте netflix.com/account',
+            'В разделе "Подписка" нажмите "Отменить"',
+            'Подтвердите отмену'
+        ],
+        'note': 'Доступ сохранится до конца периода.'
+    },
+    'telegram premium': {
+        'steps': [
+            'Откройте Telegram → Настройки',
+            'Нажмите на "Telegram Premium"',
+            'Прокрутите до "Управление подпиской"',
+            'Отмените через App Store / Google Play'
+        ],
+        'note': 'Отмена через магазин приложений.'
+    },
+    'apple music': {
+        'steps': [
+            'Откройте Настройки на iPhone',
+            'Нажмите на своё имя → Подписки',
+            'Выберите Apple Music',
+            'Нажмите "Отменить подписку"'
+        ],
+        'note': 'На Android: Apple Music → Настройки → Управление подпиской.'
+    },
+    'vk музыка': {
+        'steps': [
+            'Откройте vk.com/settings?act=payments',
+            'Найдите раздел "Подписки"',
+            'Выберите VK Музыка',
+            'Нажмите "Отменить"'
+        ],
+        'note': 'Также можно через приложение VK.'
+    },
+    'okko': {
+        'steps': [
+            'Откройте okko.tv/account',
+            'Перейдите в "Подписка"',
+            'Нажмите "Отключить автопродление"'
+        ],
+        'note': 'Если через СберПрайм — отменяйте в приложении СберБанк.'
+    },
+    'ivi': {
+        'steps': [
+            'Откройте ivi.ru → Профиль',
+            'Перейдите в "Подписка"',
+            'Нажмите "Отменить подписку"'
+        ],
+        'note': 'Доступ сохранится до конца периода.'
+    },
+    'сберпрайм': {
+        'steps': [
+            'Откройте приложение СберБанк',
+            'Перейдите в "Прайм" или "Подписки"',
+            'Выберите СберПрайм',
+            'Нажмите "Отключить"'
+        ],
+        'note': 'При отключении потеряете Okko, СберЗвук и бонусы.'
+    },
+    'мтс premium': {
+        'steps': [
+            'Откройте приложение Мой МТС',
+            'Перейдите в "Услуги" → "Подписки"',
+            'Найдите МТС Premium',
+            'Нажмите "Отключить"'
+        ],
+        'note': 'Также можно через mts.ru'
+    }
+}
+
+@app.get("/api/cancel-guide/{service}")
+async def get_cancel_guide(service: str):
+    service_lower = service.lower()
+    
+    # Ищем точное совпадение или частичное
+    guide = CANCEL_GUIDES.get(service_lower)
+    
+    if not guide:
+        for key, value in CANCEL_GUIDES.items():
+            if key in service_lower or service_lower in key:
+                guide = value
+                break
+    
+    if not guide:
+        guide = {
+            'steps': [
+                'Откройте официальный сайт или приложение сервиса',
+                'Войдите в свой аккаунт',
+                'Найдите раздел "Настройки" или "Профиль"',
+                'Перейдите в "Подписка" или "Оплата"',
+                'Нажмите "Отменить подписку"'
+            ],
+            'note': 'Если не получается — обратитесь в поддержку сервиса.'
+        }
+    
+    return {"service": service, "guide": guide}
+
 # ========== RUN ==========
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    import os
+    port = int(os.getenv("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
