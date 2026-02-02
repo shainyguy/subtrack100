@@ -36,7 +36,7 @@ async def cmd_start(message: Message):
     greeting = get_greeting()
     
     text = f"{greeting}, <b>{name}</b>! 👋\n\n"
-    text += "Я <b>SubTracker</b> — помогу контролировать подписки.\n\n"
+    text += "Я <b>SUBBY</b> — помогу контролировать подписки.\n\n"
     
     text += f"📊 <b>Статистика:</b>\n"
     text += f"├ Подписок: <b>{stats['count']}</b>\n"
@@ -118,4 +118,5 @@ async def cmd_stats(message: Message):
         s = stats['most_expensive']
         text += f"\n💎 Самая дорогая: {s['icon']} {s['name']} — {int(s['price'])}₽"
     
+
     await message.answer(text, reply_markup=main_menu(), parse_mode="HTML")
