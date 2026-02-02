@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>SubTrack</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f; --bg2: #12121a; --bg3: #1a1a24;
+            --glass: rgba(255,255,255,0.05); --glass2: rgba(255,255,255,0.08);
+            --border: rgba(255,255,255,0.08); --text: #fff;
+            --text2: rgba(255,255,255,0.6); --text3: rgba(255,255,255,0.4);
+            --accent: #6366f1; --gradient: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
+            --success: #22c55e; --warning: #f59e0b; --danger: #ef4444;
+            --safe-t: env(safe-area-inset-top); --safe-b: env(safe-area-inset-bottom);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100%; overflow: hidden; user-select: none; }
+        body { position: fixed; width: 100%; }
+        
+        .glow { position: fixed; inset: 0; z-index: -1;
+            background: radial-gradient(ellipse at 20% 0%, rgba(99,102,241,0.15), transparent 50%),
+                        radial-gradient(ellipse at 80% 100%, rgba(139,92,246,0.1), transparent 50%); }
+        
+        .splash { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.5s, visibility 0.5s; }
+        .splash.hide { opacity: 0; visibility: hidden; }
+        .splash-logo { width: 84px; height: 84px; background: var(--gradient); border-radius: 24px; display: flex; align-items: center; justify-content: center; font-size: 40px; margin-bottom: 18px; box-shadow: 0 16px 48px rgba(99,102,241,0.4); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        .splash-title { font-size: 24px; font-weight: 800; background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .splash-sub { color: var(--text2); font-size: 13px; margin-top: 6px; }
+        .loader { margin-top: 32px; width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .app { height: 100%; display: flex; flex-direction: column; padding-top: var(--safe-t); }
+        .pages { flex: 1; overflow: hidden; position: relative; }
+        .page { position: absolute; inset: 0; overflow-y: auto; padding: 0 16px 88px; opacity: 0; visibility: hidden; transform: translateX(16px); transition: all 0.3s; -webkit-overflow-scrolling: touch; }
+        .page::-webkit-scrollbar { display: none; }
+        .page.active { opacity: 1; visibility: visible; transform: translateX(0); }
+        
+        .header { padding: 14px 0; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; }
+        .user-block { display: flex; align-items: center; gap: 10px; }
+        .avatar { width: 42px; height: 42px; border-radius: 13px; background: var(--gradient); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; box-shadow: 0 4px 16px rgba(99,102,241,0.3); }
+        .greeting { font-size: 11px; color: var(--text2); }
+        .username { font-size: 15px; font-weight: 700; margin-top: 1px; }
+        .header-btns { display: flex; gap: 6px; }
+        .icon-btn { width: 38px; height: 38px; border-radius: 11px; background: var(--glass); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; }
+        .icon-btn:active { transform: scale(0.92); }
+        
+        .stats-card { background: var(--gradient); border-radius: 18px; padding: 20px; margin-bottom: 20px; position: relative; overflow: hidden; box-shadow: 0 14px 40px rgba(99,102,241,0.25); }
+        .stats-card::before { content: ''; position: absolute; top: 0; right: 0; width: 130%; height: 130%; background: radial-gradient(circle at 100% 0%, rgba(255,255,255,0.12), transparent 50%); }
+        .stats-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; position: relative; z-index: 1; }
+        .stats-label { font-size: 12px; opacity: 0.85; }
+        .stats-amount { font-size: 32px; font-weight: 800; margin-top: 3px; }
+        .stats-sub { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+        .stats-badge { background: rgba(255,255,255,0.2); padding: 4px 9px; border-radius: 14px; font-size: 10px; font-weight: 600; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; position: relative; z-index: 1; }
+        .stat-box { background: rgba(255,255,255,0.12); padding: 10px 6px; border-radius: 11px; text-align: center; }
+        .stat-val { font-size: 16px; font-weight: 700; }
+        .stat-lbl { font-size: 9px; opacity: 0.75; margin-top: 2px; }
+        
+        .section { margin-bottom: 22px; }
+        .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .section-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+        .section-link { font-size: 11px; color: var(--accent); font-weight: 600; }
+        
+        .alert { background: var(--glass); border: 1px solid var(--border); border-radius: 13px; padding: 11px; display: flex; align-items: center; gap: 9px; margin-bottom: 7px; cursor: pointer; }
+        .alert:active { transform: scale(0.98); }
+        .alert.warn { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.2); }
+        .alert.danger { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.2); }
+        .alert-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+        .alert.warn .alert-icon { background: rgba(245,158,11,0.15); }
+        .alert.danger .alert-icon { background: rgba(239,68,68,0.15); }
+        .alert-body { flex: 1; }
+        .alert-title { font-size: 12px; font-weight: 600; }
+        .alert-desc { font-size: 10px; color: var(--text2); margin-top: 1px; }
+        
+        .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 22px; }
+        .action { background: var(--glass); border: 1px solid var(--border); border-radius: 13px; padding: 12px 5px; text-align: center; cursor: pointer; }
+        .action:active { transform: scale(0.95); }
+        .action .ic { width: 36px; height: 36px; margin: 0 auto 5px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .action:nth-child(1) .ic { background: rgba(34,197,94,0.15); }
+        .action:nth-child(2) .ic { background: rgba(59,130,246,0.15); }
+        .action:nth-child(3) .ic { background: rgba(168,85,247,0.15); }
+        .action:nth-child(4) .ic { background: rgba(245,158,11,0.15); }
+        .action .txt { font-size: 9px; font-weight: 600; color: var(--text2); }
+        
+        .subs { display: flex; flex-direction: column; gap: 7px; }
+        .sub { background: var(--glass); border: 1px solid var(--border); border-radius: 13px; padding: 11px; display: flex; align-items: center; gap: 9px; cursor: pointer; position: relative; }
+        .sub::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--sub-color, var(--accent)); border-radius: 3px 0 0 3px; }
+        .sub:active { transform: scale(0.98); }
+        .sub.urgent::after { content: ''; position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; background: var(--danger); border-radius: 50%; animation: blink 1.5s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .sub-icon { width: 40px; height: 40px; border-radius: 11px; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .sub-info { flex: 1; }
+        .sub-name { font-size: 13px; font-weight: 600; }
+        .sub-cat { font-size: 10px; color: var(--text2); margin-top: 1px; }
+        .sub-right { text-align: right; }
+        .sub-price { font-size: 13px; font-weight: 700; }
+        .sub-date { font-size: 9px; color: var(--text3); margin-top: 2px; }
+        .sub-date.soon { color: var(--warning); font-weight: 500; }
+        .sub-date.urgent { color: var(--danger); font-weight: 600; }
+        
+        .empty { text-align: center; padding: 36px 18px; }
+        .empty-icon { font-size: 44px; margin-bottom: 10px; opacity: 0.5; }
+        .empty-title { font-size: 15px; font-weight: 600; margin-bottom: 5px; }
+        .empty-text { font-size: 12px; color: var(--text2); margin-bottom: 16px; }
+        
+        .premium { background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid rgba(255,215,0,0.15); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; margin-bottom: 22px; }
+        .premium::before { content: ''; position: absolute; inset: -100%; background: linear-gradient(45deg, transparent 40%, rgba(255,215,0,0.03) 50%, transparent 60%); animation: shine 4s infinite; }
+        @keyframes shine { 0% { transform: translate(-33%, -33%); } 100% { transform: translate(33%, 33%); } }
+        .premium-badge { display: inline-flex; background: linear-gradient(135deg, #ffd700, #ffaa00); color: #000; padding: 3px 7px; border-radius: 10px; font-size: 8px; font-weight: 700; text-transform: uppercase; margin-bottom: 10px; position: relative; z-index: 1; }
+        .premium-title { font-size: 15px; font-weight: 700; margin-bottom: 5px; position: relative; z-index: 1; }
+        .premium-desc { font-size: 11px; color: var(--text2); line-height: 1.4; margin-bottom: 12px; position: relative; z-index: 1; }
+        .premium-btn { width: 100%; padding: 11px; background: linear-gradient(135deg, #ffd700, #ffaa00); color: #000; border: none; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; position: relative; z-index: 1; }
+        .premium-btn:active { transform: scale(0.98); }
+        
+        .nav { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(10,10,15,0.95); backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; justify-content: space-around; padding: 7px 14px; padding-bottom: calc(7px + var(--safe-b)); z-index: 100; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 12px; border-radius: 9px; cursor: pointer; }
+        .nav-item.active { background: var(--glass); }
+        .nav-item .icon { font-size: 18px; opacity: 0.5; }
+        .nav-item.active .icon { opacity: 1; }
+        .nav-item .label { font-size: 8px; color: var(--text2); font-weight: 500; }
+        .nav-item.active .label { color: var(--text); }
+        
+        .fab { position: fixed; bottom: calc(72px + var(--safe-b)); right: 14px; width: 48px; height: 48px; background: var(--gradient); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; cursor: pointer; box-shadow: 0 6px 24px rgba(99,102,241,0.4); z-index: 99; }
+        .fab:active { transform: scale(0.9); }
+        
+        .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.3s; }
+        .modal-bg.open { opacity: 1; visibility: visible; }
+        .modal { position: absolute; bottom: 0; left: 0; right: 0; background: var(--bg2); border-radius: 18px 18px 0 0; padding: 18px; padding-bottom: calc(18px + var(--safe-b)); max-height: 88vh; overflow-y: auto; transform: translateY(100%); transition: transform 0.35s ease; }
+        .modal-bg.open .modal { transform: translateY(0); }
+        .modal-handle { width: 28px; height: 3px; background: var(--border); border-radius: 2px; margin: 0 auto 12px; }
+        .modal-title { font-size: 16px; font-weight: 700; text-align: center; margin-bottom: 16px; }
+        
+        .form-group { margin-bottom: 12px; }
+        .form-label { display: block; font-size: 10px; color: var(--text2); margin-bottom: 5px; font-weight: 500; }
+        .form-input { width: 100%; padding: 11px 12px; background: var(--glass); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 13px; font-family: inherit; }
+        .form-input:focus { outline: none; border-color: var(--accent); }
+        .form-input::placeholder { color: var(--text3); }
+        
+        .services { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 14px; }
+        .service { padding: 9px 3px; background: var(--glass); border: 1px solid var(--border); border-radius: 9px; text-align: center; cursor: pointer; }
+        .service:active, .service.selected { border-color: var(--accent); background: rgba(99,102,241,0.1); }
+        .service .icon { font-size: 22px; margin-bottom: 2px; }
+        .service .name { font-size: 7px; color: var(--text2); }
+        
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 11px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background: var(--gradient); color: #fff; }
+        .btn-secondary { background: var(--glass); color: var(--text); border: 1px solid var(--border); }
+        .btn-danger { background: rgba(239,68,68,0.1); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); }
+        .btn + .btn { margin-top: 7px; }
+        
+        .details-header { text-align: center; margin-bottom: 18px; }
+        .details-icon { width: 58px; height: 58px; margin: 0 auto 10px; border-radius: 16px; background: var(--glass); display: flex; align-items: center; justify-content: center; font-size: 28px; }
+        .details-name { font-size: 18px; font-weight: 700; }
+        .details-cat { font-size: 11px; color: var(--text2); margin-top: 3px; }
+        .details-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; margin-bottom: 14px; }
+        .details-stat { background: var(--glass); padding: 12px; border-radius: 11px; text-align: center; }
+        .details-stat .val { font-size: 16px; font-weight: 700; color: var(--accent); }
+        .details-stat .lbl { font-size: 9px; color: var(--text2); margin-top: 2px; }
+        
+        .guide-steps { margin-bottom: 14px; }
+        .guide-step { display: flex; align-items: flex-start; gap: 9px; padding: 10px; background: var(--glass); border-radius: 9px; margin-bottom: 6px; }
+        .guide-num { width: 22px; height: 22px; border-radius: 50%; background: var(--gradient); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+        .guide-text { font-size: 12px; line-height: 1.4; padding-top: 2px; }
+        .guide-note { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); border-radius: 9px; padding: 10px; font-size: 11px; color: var(--warning); margin-bottom: 14px; }
+        
+        .toast { position: fixed; top: calc(14px + var(--safe-t)); left: 50%; transform: translateX(-50%) translateY(-100px); background: var(--bg2); border: 1px solid var(--border); padding: 10px 16px; border-radius: 11px; font-size: 12px; font-weight: 500; z-index: 2000; transition: transform 0.4s; box-shadow: 0 6px 24px rgba(0,0,0,0.3); }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+        .toast.success { border-color: rgba(34,197,94,0.3); }
+        .toast.error { border-color: rgba(239,68,68,0.3); }
+        
+        .chart-card { background: var(--glass); border: 1px solid var(--border); border-radius: 13px; padding: 14px; margin-bottom: 12px; }
+        .chart-title { font-size: 12px; font-weight: 600; margin-bottom: 12px; }
+        .chart-bars { display: flex; align-items: flex-end; justify-content: space-between; height: 90px; gap: 5px; }
+        .chart-bar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .chart-bar .bar { width: 100%; background: var(--gradient); border-radius: 3px 3px 0 0; min-height: 5px; }
+        .chart-bar .lbl { font-size: 8px; color: var(--text3); }
+        .cat-list { display: flex; flex-direction: column; gap: 6px; }
+        .cat-item { display: flex; align-items: center; gap: 9px; padding: 10px; background: var(--glass); border-radius: 11px; }
+        .cat-icon { width: 32px; height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .cat-info { flex: 1; }
+        .cat-name { font-size: 12px; font-weight: 600; }
+        .cat-count { font-size: 10px; color: var(--text2); }
+        .cat-amount { font-size: 12px; font-weight: 600; }
+        
+        .profile-header { text-align: center; padding: 18px 0; }
+        .profile-avatar { width: 66px; height: 66px; margin: 0 auto 12px; border-radius: 20px; background: var(--gradient); display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; box-shadow: 0 6px 24px rgba(99,102,241,0.3); }
+        .profile-name { font-size: 18px; font-weight: 700; }
+        .profile-status { font-size: 11px; color: var(--text2); margin-top: 3px; }
+        .menu-list { display: flex; flex-direction: column; gap: 5px; }
+        .menu-item { display: flex; align-items: center; gap: 10px; padding: 12px; background: var(--glass); border: 1px solid var(--border); border-radius: 11px; cursor: pointer; }
+        .menu-item:active { transform: scale(0.98); }
+        .menu-icon { width: 32px; height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .menu-text { flex: 1; }
+        .menu-title { font-size: 12px; font-weight: 600; }
+        .menu-desc { font-size: 10px; color: var(--text2); margin-top: 1px; }
+        .menu-arrow { color: var(--text3); font-size: 12px; }
+        
+        .ach-card { background: var(--glass); border: 1px solid var(--border); border-radius: 13px; padding: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .ach-icon { width: 44px; height: 44px; border-radius: 11px; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+        .ach-info { flex: 1; }
+        .ach-name { font-size: 13px; font-weight: 600; }
+        .ach-desc { font-size: 10px; color: var(--text2); margin-top: 2px; }
+        .ach-xp { font-size: 11px; color: var(--accent); font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="glow"></div>
+    
+    <div class="splash" id="splash">
+        <div class="splash-logo">💳</div>
+        <div class="splash-title">SubTrack</div>
+        <div class="splash-sub">Загрузка подписок...</div>
+        <div class="loader"></div>
+    </div>
+
+    <div class="app">
+        <div class="pages">
+            <!-- HOME -->
+            <div class="page active" id="page-home">
+                <header class="header"><div class="header-row">
+                    <div class="user-block">
+                        <div class="avatar" id="avatar">?</div>
+                        <div><div class="greeting">Привет 👋</div><div class="username" id="userName">Загрузка...</div></div>
+                    </div>
+                    <div class="header-btns">
+                        <button class="icon-btn" onclick="switchPage('achievements')">🏆</button>
+                        <button class="icon-btn" onclick="switchPage('profile')">⚙️</button>
+                    </div>
+                </div></header>
+
+                <div class="stats-card">
+                    <div class="stats-top">
+                        <div>
+                            <div class="stats-label">В месяц</div>
+                            <div class="stats-amount" id="statTotal">0 ₽</div>
+                            <div class="stats-sub" id="statYear">0 ₽ в год</div>
+                        </div>
+                        <div class="stats-badge" id="statBadge">0 подписок</div>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-box"><div class="stat-val" id="statActive">0</div><div class="stat-lbl">Активных</div></div>
+                        <div class="stat-box"><div class="stat-val" id="statSoon">0</div><div class="stat-lbl">Скоро</div></div>
+                        <div class="stat-box"><div class="stat-val" id="statSave">0 ₽</div><div class="stat-lbl">Экономия</div></div>
+                    </div>
+                </div>
+
+                <div class="section" id="alertsSection" style="display:none;">
+                    <div class="section-head"><div class="section-title">⚠️ Внимание</div></div>
+                    <div id="alertsList"></div>
+                </div>
+
+                <div class="actions">
+                    <div class="action" onclick="openAddModal()"><div class="ic">➕</div><div class="txt">Добавить</div></div>
+                    <div class="action" onclick="switchPage('analytics')"><div class="ic">📊</div><div class="txt">Аналитика</div></div>
+                    <div class="action" onclick="checkDuplicates()"><div class="ic">🔄</div><div class="txt">Дубликаты</div></div>
+                    <div class="action" onclick="switchPage('trials')"><div class="ic">⏱️</div><div class="txt">Триалы</div></div>
+                </div>
+
+                <div class="section">
+                    <div class="section-head"><div class="section-title">💳 Подписки</div><div class="section-link" onclick="switchPage('subscriptions')">Все →</div></div>
+                    <div class="subs" id="subsList"></div>
+                </div>
+
+                <div class="premium" id="premiumCard">
+                    <div class="premium-badge">✨ Поддержка</div>
+                    <div class="premium-title">Помогите развитию</div>
+                    <div class="premium-desc">Ваша поддержка поможет добавить новые функции!</div>
+                    <button class="premium-btn" onclick="supportProject()">Поддержать за 399 ₽</button>
+                </div>
+            </div>
+
+            <!-- SUBSCRIPTIONS -->
+            <div class="page" id="page-subscriptions">
+                <header class="header"><div class="header-row"><div class="section-title">💳 Все подписки</div><button class="icon-btn" onclick="openAddModal()">➕</button></div></header>
+                <div class="subs" id="allSubsList"></div>
+            </div>
+
+            <!-- TRIALS -->
+            <div class="page" id="page-trials">
+                <header class="header"><div class="header-row"><div class="section-title">⏱️ Триалы</div><button class="icon-btn" onclick="openTrialModal()">➕</button></div></header>
+                <div class="subs" id="trialsList"></div>
+            </div>
+
+            <!-- ANALYTICS -->
+            <div class="page" id="page-analytics">
+                <header class="header"><div class="section-title">📊 Аналитика</div></header>
+                <div class="chart-card"><div class="chart-title">Расходы за 6 месяцев</div><div class="chart-bars" id="chartBars"></div></div>
+                <div class="section"><div class="section-title" style="margin-bottom:10px;">📂 Категории</div><div class="cat-list" id="catList"></div></div>
+            </div>
+
+            <!-- ACHIEVEMENTS -->
+            <div class="page" id="page-achievements">
+                <header class="header"><div class="section-title">🏆 Достижения</div></header>
+                <div class="stats-card" style="background:var(--glass);box-shadow:none;margin-bottom:14px;">
+                    <div class="stats-grid">
+                        <div class="stat-box" style="background:var(--bg3);"><div class="stat-val" id="achXP">0</div><div class="stat-lbl">XP</div></div>
+                        <div class="stat-box" style="background:var(--bg3);"><div class="stat-val" id="achSaved">0 ₽</div><div class="stat-lbl">Сэкономлено</div></div>
+                        <div class="stat-box" style="background:var(--bg3);"><div class="stat-val" id="achCount">0</div><div class="stat-lbl">Получено</div></div>
+                    </div>
+                </div>
+                <div id="achList"></div>
+            </div>
+
+            <!-- PROFILE -->
+            <div class="page" id="page-profile">
+                <div class="profile-header">
+                    <div class="profile-avatar" id="profAvatar">?</div>
+                    <div class="profile-name" id="profName">Пользователь</div>
+                    <div class="profile-status" id="profStatus">Бесплатный план</div>
+                </div>
+                <div class="section"><div class="section-title" style="margin-bottom:10px;">⚙️ Настройки</div>
+                    <div class="menu-list">
+                        <div class="menu-item" onclick="supportProject()"><div class="menu-icon" style="background:linear-gradient(135deg,#ffd700,#ffaa00);">⭐</div><div class="menu-text"><div class="menu-title">Поддержать проект</div><div class="menu-desc">399 ₽</div></div><div class="menu-arrow">›</div></div>
+                        <div class="menu-item" onclick="exportData()"><div class="menu-icon" style="background:var(--success);">📤</div><div class="menu-text"><div class="menu-title">Экспорт данных</div><div class="menu-desc">JSON файл</div></div><div class="menu-arrow">›</div></div>
+                        <div class="menu-item" onclick="openBot()"><div class="menu-icon" style="background:var(--accent);">🤖</div><div class="menu-text"><div class="menu-title">Открыть бота</div><div class="menu-desc">Все функции в Telegram</div></div><div class="menu-arrow">›</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="fab" onclick="openAddModal()">+</button>
+
+        <nav class="nav">
+            <div class="nav-item active" data-page="home" onclick="switchPage('home')"><div class="icon">🏠</div><div class="label">Главная</div></div>
+            <div class="nav-item" data-page="subscriptions" onclick="switchPage('subscriptions')"><div class="icon">💳</div><div class="label">Подписки</div></div>
+            <div class="nav-item" data-page="analytics" onclick="switchPage('analytics')"><div class="icon">📊</div><div class="label">Аналитика</div></div>
+            <div class="nav-item" data-page="profile" onclick="switchPage('profile')"><div class="icon">👤</div><div class="label">Профиль</div></div>
+        </nav>
+    </div>
+
+    <!-- Add Subscription Modal -->
+    <div class="modal-bg" id="addModal"><div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title">Добавить подписку</div>
+        <div class="form-label">Популярные</div>
+        <div class="services" id="servicesGrid"></div>
+        <div class="form-group"><label class="form-label">Название</label><input type="text" class="form-input" id="inName" placeholder="Название сервиса"></div>
+        <div class="form-group"><label class="form-label">Цена (₽/мес)</label><input type="number" class="form-input" id="inPrice" placeholder="299"></div>
+        <div class="form-group"><label class="form-label">Следующее списание</label><input type="date" class="form-input" id="inDate"></div>
+        <button class="btn btn-primary" onclick="saveSub()">Добавить</button>
+        <button class="btn btn-secondary" onclick="closeModal('addModal')">Отмена</button>
+    </div></div>
+
+    <!-- Details Modal -->
+    <div class="modal-bg" id="detailsModal"><div class="modal">
+        <div class="modal-handle"></div>
+        <div class="details-header">
+            <div class="details-icon" id="detIcon">💳</div>
+            <div class="details-name" id="detName">Сервис</div>
+            <div class="details-cat" id="detCat">Категория</div>
+        </div>
+        <div class="details-stats">
+            <div class="details-stat"><div class="val" id="detPrice">0 ₽</div><div class="lbl">в месяц</div></div>
+            <div class="details-stat"><div class="val" id="detYear">0 ₽</div><div class="lbl">в год</div></div>
+        </div>
+        <div class="details-stat" style="margin-bottom:14px;"><div class="val" id="detNext">—</div><div class="lbl">Следующее списание</div></div>
+        <button class="btn btn-secondary" onclick="showGuide()">📋 Как отменить</button>
+        <button class="btn btn-danger" onclick="deleteSub()">🗑 Удалить</button>
+        <button class="btn btn-secondary" onclick="closeModal('detailsModal')">Закрыть</button>
+    </div></div>
+
+    <!-- Guide Modal -->
+    <div class="modal-bg" id="guideModal"><div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title" id="guideTitle">Как отменить</div>
+        <div class="guide-steps" id="guideSteps"></div>
+        <div class="guide-note" id="guideNote"></div>
+        <button class="btn btn-primary" onclick="closeModal('guideModal')">Понятно</button>
+    </div></div>
+
+    <!-- Duplicates Modal -->
+    <div class="modal-bg" id="dupModal"><div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title">🔄 Дубликаты</div>
+        <div id="dupList"></div>
+        <button class="btn btn-primary" onclick="closeModal('dupModal')">Закрыть</button>
+    </div></div>
+
+    <!-- Trial Modal -->
+    <div class="modal-bg" id="trialModal"><div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title">Добавить триал</div>
+        <div class="form-group"><label class="form-label">Название</label><input type="text" class="form-input" id="trialName" placeholder="Netflix"></div>
+        <div class="form-group"><label class="form-label">Дата окончания</label><input type="date" class="form-input" id="trialDate"></div>
+        <div class="form-group"><label class="form-label">Цена после триала (₽)</label><input type="number" class="form-input" id="trialPrice" placeholder="999"></div>
+        <button class="btn btn-primary" onclick="saveTrial()">Добавить</button>
+        <button class="btn btn-secondary" onclick="closeModal('trialModal')">Отмена</button>
+    </div></div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const tg = window.Telegram?.WebApp;
+        const API = '';
+        let userId = 0;
+        let user = {};
+        let subs = [];
+        let trials = [];
+        let stats = {};
+        let achievements = {};
+        let currentSub = null;
+
+        const SERVICES = [
+            { name: 'Яндекс Плюс', icon: '🎵', price: 399, category: 'bundle' },
+            { name: 'Кинопоиск', icon: '🎬', price: 299, category: 'video' },
+            { name: 'Spotify', icon: '🎧', price: 199, category: 'music' },
+            { name: 'YouTube Premium', icon: '▶️', price: 199, category: 'video' },
+            { name: 'Netflix', icon: '🎬', price: 999, category: 'video' },
+            { name: 'VK Музыка', icon: '🎵', price: 199, category: 'music' },
+            { name: 'Telegram Premium', icon: '✈️', price: 299, category: 'other' },
+            { name: 'iCloud+', icon: '☁️', price: 99, category: 'storage' },
+        ];
+
+        document.addEventListener('DOMContentLoaded', init);
+
+        async function init() {
+            if (tg) { tg.ready(); tg.expand(); }
+            userId = tg?.initDataUnsafe?.user?.id || localStorage.getItem('demo_id') || Date.now();
+            localStorage.setItem('demo_id', userId);
+            renderServices();
+            await loadData();
+            setTimeout(() => document.getElementById('splash').classList.add('hide'), 1000);
+        }
+
+        async function loadData() {
+            try {
+                // Auth
+                await fetch(API + '/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        username: tg?.initDataUnsafe?.user?.username,
+                        first_name: tg?.initDataUnsafe?.user?.first_name || 'Пользователь'
+                    })
+                });
+
+                // Get data
+                const [subsRes, trialsRes, statsRes, achRes] = await Promise.all([
+                    fetch(API + '/api/subscriptions/' + userId),
+                    fetch(API + '/api/trials/' + userId),
+                    fetch(API + '/api/stats/' + userId),
+                    fetch(API + '/api/achievements/' + userId)
+                ]);
+
+                const subsData = await subsRes.json();
+                const trialsData = await trialsRes.json();
+                const statsData = await statsRes.json();
+                const achData = await achRes.json();
+
+                subs = subsData.subscriptions || [];
+                stats = subsData.stats || {};
+                trials = trialsData.trials || [];
+                achievements = achData;
+                user = { first_name: tg?.initDataUnsafe?.user?.first_name || 'Пользователь' };
+
+                localStorage.setItem('subs', JSON.stringify(subs));
+            } catch (e) {
+                console.error(e);
+                subs = JSON.parse(localStorage.getItem('subs') || '[]');
+                user = { first_name: 'Пользователь' };
+            }
+            updateUI();
+        }
+
+        function updateUI() {
+            const n = user.first_name || 'Пользователь';
+            document.getElementById('userName').textContent = n;
+            document.getElementById('avatar').textContent = n.charAt(0).toUpperCase();
+            document.getElementById('profName').textContent = n;
+            document.getElementById('profAvatar').textContent = n.charAt(0).toUpperCase();
+
+            const total = stats.total_monthly || subs.reduce((s, sub) => s + (sub.price || 0), 0);
+            const soon = subs.filter(s => { const d = getDays(s.next_payment); return d >= 0 && d <= 7; }).length;
+            const save = stats.total_saved || 0;
+
+            document.getElementById('statTotal').textContent = Math.round(total).toLocaleString('ru-RU') + ' ₽';
+            document.getElementById('statYear').textContent = Math.round(total * 12).toLocaleString('ru-RU') + ' ₽ в год';
+            document.getElementById('statBadge').textContent = subs.length + ' подписок';
+            document.getElementById('statActive').textContent = subs.length;
+            document.getElementById('statSoon').textContent = soon;
+            document.getElementById('statSave').textContent = Math.round(save) + ' ₽';
+
+            renderSubs();
+            renderTrials();
+            renderAlerts();
+            renderAnalytics();
+            renderAchievements();
+        }
+
+        function renderSubs() {
+            const html = subs.length === 0 
+                ? '<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Нет подписок</div><div class="empty-text">Добавьте первую подписку</div><button class="btn btn-primary" onclick="openAddModal()">Добавить</button></div>'
+                : subs.map((s, i) => subCard(s, i)).join('');
+            document.getElementById('subsList').innerHTML = html;
+            document.getElementById('allSubsList').innerHTML = html;
+        }
+
+        function subCard(s, i) {
+            const days = getDays(s.next_payment);
+            let dc = '', dt = formatDate(s.next_payment);
+            if (days <= 0) { dc = 'urgent'; dt = days === 0 ? 'Сегодня!' : 'Просрочено'; }
+            else if (days <= 3) { dc = 'urgent'; dt = `Через ${days} дн.`; }
+            else if (days <= 7) { dc = 'soon'; dt = `Через ${days} дн.`; }
+            const color = getCatColor(s.category);
+            return `<div class="sub ${days <= 3 && days >= 0 ? 'urgent' : ''}" style="--sub-color:${color}" onclick="openDetails(${i})">
+                <div class="sub-icon">${s.icon||'💳'}</div>
+                <div class="sub-info"><div class="sub-name">${s.name}</div><div class="sub-cat">${getCatName(s.category)}</div></div>
+                <div class="sub-right"><div class="sub-price">${s.price} ₽</div><div class="sub-date ${dc}">${dt}</div></div>
+            </div>`;
+        }
+
+        function renderTrials() {
+            const html = trials.length === 0
+                ? '<div class="empty"><div class="empty-icon">⏱️</div><div class="empty-title">Нет триалов</div><div class="empty-text">Добавьте пробный период</div><button class="btn btn-primary" onclick="openTrialModal()">Добавить</button></div>'
+                : trials.map(t => {
+                    const days = getDays(t.end_date);
+                    const dc = days <= 2 ? 'urgent' : days <= 5 ? 'soon' : '';
+                    return `<div class="sub ${days <= 2 ? 'urgent' : ''}" style="--sub-color:#f59e0b">
+                        <div class="sub-icon">${t.icon||'⏱️'}</div>
+                        <div class="sub-info"><div class="sub-name">${t.name}</div><div class="sub-cat">Триал</div></div>
+                        <div class="sub-right"><div class="sub-price">${t.price_after} ₽</div><div class="sub-date ${dc}">${days <= 0 ? 'Закончился' : `${days} дн.`}</div></div>
+                    </div>`;
+                }).join('');
+            document.getElementById('trialsList').innerHTML = html;
+        }
+
+        function renderAlerts() {
+            const alerts = [];
+            subs.forEach(s => {
+                const days = getDays(s.next_payment);
+                if (days >= 0 && days <= 2) alerts.push({ type: 'danger', icon: '💰', title: `${s.name} — ${days === 0 ? 'сегодня' : days === 1 ? 'завтра' : 'через 2 дня'}!`, desc: `Списание ${s.price} ₽` });
+            });
+            trials.forEach(t => {
+                const days = getDays(t.end_date);
+                if (days >= 0 && days <= 3) alerts.push({ type: 'warn', icon: '⏱️', title: `Триал ${t.name}`, desc: `Заканчивается ${days === 0 ? 'сегодня' : `через ${days} дн.`}` });
+            });
+            const sec = document.getElementById('alertsSection');
+            const list = document.getElementById('alertsList');
+            if (alerts.length === 0) { sec.style.display = 'none'; return; }
+            sec.style.display = 'block';
+            list.innerHTML = alerts.map(a => `<div class="alert ${a.type}"><div class="alert-icon">${a.icon}</div><div class="alert-body"><div class="alert-title">${a.title}</div><div class="alert-desc">${a.desc}</div></div></div>`).join('');
+        }
+
+        function renderAnalytics() {
+            const cats = {};
+            const catIcons = { music: '🎵', video: '🎬', bundle: '📦', storage: '☁️', other: '📱' };
+            const catColors = { music: '#1DB954', video: '#E50914', bundle: '#FF6B00', storage: '#007AFF', other: '#6366f1' };
+            subs.forEach(s => {
+                const c = s.category || 'other';
+                if (!cats[c]) cats[c] = { total: 0, count: 0 };
+                cats[c].total += s.price;
+                cats[c].count++;
+            });
+            document.getElementById('catList').innerHTML = Object.entries(cats).sort((a, b) => b[1].total - a[1].total)
+                .map(([n, d]) => `<div class="cat-item"><div class="cat-icon" style="background:${catColors[n]||'#6366f1'}">${catIcons[n]||'📱'}</div><div class="cat-info"><div class="cat-name">${getCatName(n)}</div><div class="cat-count">${d.count} подписок</div></div><div class="cat-amount">${d.total} ₽</div></div>`).join('') || '<div class="empty-text">Нет данных</div>';
+            
+            const total = subs.reduce((s, sub) => s + (sub.price || 0), 0);
+            const months = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+            const now = new Date();
+            let chartData = [];
+            for (let i = 5; i >= 0; i--) chartData.push({ m: months[(now.getMonth() - i + 12) % 12], v: total });
+            const max = Math.max(...chartData.map(d => d.v), 1);
+            document.getElementById('chartBars').innerHTML = chartData.map(d => `<div class="chart-bar"><div class="bar" style="height:${(d.v/max)*100}%"></div><div class="lbl">${d.m}</div></div>`).join('');
+        }
+
+        function renderAchievements() {
+            document.getElementById('achXP').textContent = achievements.xp || 0;
+            document.getElementById('achSaved').textContent = (achievements.total_saved || 0) + ' ₽';
+            const achs = achievements.achievements || [];
+            document.getElementById('achCount').textContent = achs.filter(a => a.unlocked).length;
+            document.getElementById('achList').innerHTML = achs.map(a => `
+                <div class="ach-card" style="opacity:${a.unlocked ? 1 : 0.5}">
+                    <div class="ach-icon">${a.icon || '🏆'}</div>
+                    <div class="ach-info"><div class="ach-name">${a.name}</div><div class="ach-desc">${a.description}</div></div>
+                    <div class="ach-xp">+${a.xp} XP</div>
+                </div>
+            `).join('') || '<div class="empty-text">Достижения появятся позже</div>';
+        }
+
+        function renderServices() {
+            document.getElementById('servicesGrid').innerHTML = SERVICES.map((s, i) => `<div class="service" onclick="selectService(${i})"><div class="icon">${s.icon}</div><div class="name">${s.name.split(' ')[0]}</div></div>`).join('');
+        }
+
+        function selectService(i) {
+            const s = SERVICES[i];
+            document.getElementById('inName').value = s.name;
+            document.getElementById('inPrice').value = s.price;
+            document.querySelectorAll('.service').forEach((el, idx) => el.classList.toggle('selected', idx === i));
+            haptic('light');
+        }
+
+        function getCatName(cat) {
+            const names = { music: 'Музыка', video: 'Видео', bundle: 'Бандл', storage: 'Хранилище', other: 'Другое' };
+            return names[cat] || 'Другое';
+        }
+
+        function getCatColor(cat) {
+            const colors = { music: '#1DB954', video: '#E50914', bundle: '#FF6B00', storage: '#007AFF', other: '#6366f1' };
+            return colors[cat] || '#6366f1';
+        }
+
+        function switchPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('page-' + id).classList.add('active');
+            const navItem = document.querySelector(`.nav-item[data-page="${id}"]`);
+            if (navItem) navItem.classList.add('active');
+            haptic('light');
+        }
+
+        function openModal(id) { document.getElementById(id).classList.add('open'); haptic('light'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); }));
+
+        function openAddModal() {
+            const d = new Date(); d.setMonth(d.getMonth() + 1);
+            document.getElementById('inDate').value = d.toISOString().split('T')[0];
+            document.getElementById('inName').value = '';
+            document.getElementById('inPrice').value = '';
+            document.querySelectorAll('.service').forEach(el => el.classList.remove('selected'));
+            openModal('addModal');
+        }
+
+        function openTrialModal() {
+            const d = new Date(); d.setDate(d.getDate() + 14);
+            document.getElementById('trialDate').value = d.toISOString().split('T')[0];
+            document.getElementById('trialName').value = '';
+            document.getElementById('trialPrice').value = '';
+            openModal('trialModal');
+        }
+
+        async function saveSub() {
+            const name = document.getElementById('inName').value.trim();
+            const price = parseFloat(document.getElementById('inPrice').value);
+            const date = document.getElementById('inDate').value;
+            if (!name || !price || !date) { showToast('Заполните все поля', 'error'); return; }
+            const info = SERVICES.find(s => s.name.toLowerCase() === name.toLowerCase()) || {};
+            try {
+                const res = await fetch(API + '/api/subscriptions/' + userId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, price, next_payment: date, category: info.category || 'other', icon: info.icon || '📦', cycle: 'monthly' })
+                });
+                const data = await res.json();
+                subs.push({ id: data.id, name, price, next_payment: date, category: info.category || 'other', icon: info.icon || '📦' });
+                localStorage.setItem('subs', JSON.stringify(subs));
+            } catch (e) { subs.push({ id: Date.now(), name, price, next_payment: date, icon: info.icon || '📦', category: info.category || 'other' }); }
+            closeModal('addModal');
+            updateUI();
+            showToast('Подписка добавлена!', 'success');
+            haptic('success');
+        }
+
+        async function saveTrial() {
+            const name = document.getElementById('trialName').value.trim();
+            const date = document.getElementById('trialDate').value;
+            const price = parseFloat(document.getElementById('trialPrice').value) || 0;
+            if (!name || !date) { showToast('Заполните все поля', 'error'); return; }
+            try {
+                await fetch(API + '/api/trials/' + userId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, end_date: date, price_after: price, icon: '⏱️' })
+                });
+            } catch (e) {}
+            trials.push({ name, end_date: date, price_after: price, icon: '⏱️' });
+            closeModal('trialModal');
+            updateUI();
+            showToast('Триал добавлен!', 'success');
+            haptic('success');
+        }
+
+        function openDetails(i) {
+            currentSub = subs[i];
+            document.getElementById('detIcon').textContent = currentSub.icon || '💳';
+            document.getElementById('detName').textContent = currentSub.name;
+            document.getElementById('detCat').textContent = getCatName(currentSub.category);
+            document.getElementById('detPrice').textContent = currentSub.price + ' ₽';
+            document.getElementById('detYear').textContent = (currentSub.price * 12) + ' ₽';
+            document.getElementById('detNext').textContent = formatDate(currentSub.next_payment);
+            openModal('detailsModal');
+        }
+
+        async function deleteSub() {
+            if (!currentSub) return;
+            try { await fetch(API + '/api/subscriptions/' + currentSub.id, { method: 'DELETE' }); } catch (e) {}
+            subs = subs.filter(s => s.id !== currentSub.id);
+            localStorage.setItem('subs', JSON.stringify(subs));
+            closeModal('detailsModal');
+            updateUI();
+            showToast('Удалено', 'success');
+            haptic('success');
+        }
+
+        async function showGuide() {
+            if (!currentSub) return;
+            try {
+                const res = await fetch(API + '/api/cancel-guide/' + encodeURIComponent(currentSub.name));
+                const data = await res.json();
+                if (data.guide) {
+                    document.getElementById('guideTitle').textContent = 'Как отменить ' + currentSub.name;
+                    document.getElementById('guideSteps').innerHTML = data.guide.steps.map((s, i) => `<div class="guide-step"><div class="guide-num">${i + 1}</div><div class="guide-text">${s}</div></div>`).join('');
+                    document.getElementById('guideNote').textContent = data.guide.note || '';
+                    closeModal('detailsModal');
+                    openModal('guideModal');
+                }
+            } catch (e) { showToast('Ошибка загрузки', 'error'); }
+        }
+
+        async function checkDuplicates() {
+            try {
+                const res = await fetch(API + '/api/duplicates/' + userId);
+                const data = await res.json();
+                if (data.issues && data.issues.length > 0) {
+                    document.getElementById('dupList').innerHTML = data.issues.map(d => `<div class="alert warn" style="margin-bottom:8px;"><div class="alert-icon">🔄</div><div class="alert-body"><div class="alert-title">${d.ecosystem} + ${d.duplicate}</div><div class="alert-desc">${d.hint}</div><div style="margin-top:4px;color:var(--success);font-weight:600;">Экономия: ${d.saving} ₽/мес</div></div></div>`).join('');
+                    openModal('dupModal');
+                } else { showToast('Дубликатов нет 👍', 'success'); }
+            } catch (e) { showToast('Дубликатов нет 👍', 'success'); }
+            haptic('medium');
+        }
+
+        function supportProject() {
+            const url = 'https://t.me/SubTrack100_bot?start=donate';
+            if (tg) tg.openTelegramLink(url); else window.open(url, '_blank');
+            haptic('success');
+        }
+
+        function exportData() {
+            const data = { date: new Date().toISOString(), subscriptions: subs, trials: trials };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = 'subtrack-' + new Date().toISOString().split('T')[0] + '.json'; a.click();
+            showToast('Экспортировано!', 'success');
+        }
+
+        function openBot() {
+            const url = 'https://t.me/SubTrack100_bot';
+            if (tg) tg.openTelegramLink(url); else window.open(url, '_blank');
+        }
+
+        function getDays(d) { if (!d) return 999; const date = new Date(d), now = new Date(); now.setHours(0,0,0,0); date.setHours(0,0,0,0); return Math.ceil((date - now) / 86400000); }
+        function formatDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }); }
+        function showToast(msg, type = 'success') { const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast ' + type + ' show'; setTimeout(() => t.classList.remove('show'), 3000); }
+        function haptic(type) { if (!tg?.HapticFeedback) return; if (type === 'light') tg.HapticFeedback.impactOccurred('light'); else if (type === 'success') tg.HapticFeedback.notificationOccurred('success'); else if (type === 'medium') tg.HapticFeedback.impactOccurred('medium'); }
+    </script>
+</body>
+</html>
