@@ -147,134 +147,104 @@ async def health():
 
 # ========== PAYMENT API ==========
 
+class PaymentCreate(BaseModel):
+    user_id: int
+    amount: float = 399
+    payment_type: str = "support"
+    description: str = "Поддержка проекта SubTrack"
+
+
 @app.post("/api/payment/create")
-async def create_payment(data: PaymentCreate):
-    """Создать платёж через ЮКассу"""
+async def create_payment_endpoint(data: PaymentCreate):
+    """Создать платёж"""
     
-    # Сначала убедимся что пользователь существует
+    # Сначала создаём пользователя если его нет
     user = await db.get_user(data.user_id)
     if not user:
-        # Создаём пользователя если его нет
-        user = await db.create_user(data.user_id)
+        user = await db.create_user(data.user_id, None, "Пользователь")
     
-    if not YOOKASSA_ENABLED:
-        # Если ЮКасса не настроена — возвращаем ссылку на бота
+    # Проверяем настроена ли ЮКасса
+    from config import YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY, BOT_USERNAME
+    
+    if YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY:
+        try:
+            from yookassa import Configuration, Payment
+            import uuid
+            
+            Configuration.account_id = YOOKASSA_SHOP_ID
+            Configuration.secret_key = YOOKASSA_SECRET_KEY
+            
+            idempotence_key = str(uuid.uuid4())
+            
+            payment = Payment.create({
+                "amount": {
+                    "value": str(data.amount),
+                    "currency": "RUB"
+                },
+                "confirmation": {
+                    "type": "redirect",
+                    "return_url": f"https://t.me/{BOT_USERNAME}?start=payment_success"
+                },
+                "capture": True,
+                "description": data.description,
+                "metadata": {
+                    "user_id": data.user_id,
+                    "payment_type": data.payment_type
+                }
+            }, idempotence_key)
+            
+            # Сохраняем платёж
+            await db.create_payment(
+                user_id=data.user_id,
+                payment_id=payment.id,
+                amount=data.amount,
+                payment_type=data.payment_type,
+                status="pending"
+            )
+            
+            return {
+                "success": True,
+                "payment_id": payment.id,
+                "payment_url": payment.confirmation.confirmation_url,
+                "method": "yookassa"
+            }
+            
+        except Exception as e:
+            # Если ошибка — fallback на бота
+            return {
+                "success": True,
+                "payment_url": f"https://t.me/{BOT_USERNAME}?start=donate_{int(data.amount)}",
+                "method": "bot",
+                "error": str(e)
+            }
+    else:
+        # ЮКасса не настроена — открываем бота
+        BOT_USERNAME = "SubTrack100_bot"  # Замените на username вашего бота
         return {
             "success": True,
             "payment_url": f"https://t.me/{BOT_USERNAME}?start=donate_{int(data.amount)}",
             "method": "bot"
         }
-    
-    try:
-        # Создаём платёж в ЮКассе
-        idempotence_key = str(uuid.uuid4())
-        
-        payment = Payment.create({
-            "amount": {
-                "value": str(data.amount),
-                "currency": "RUB"
-            },
-            "confirmation": {
-                "type": "redirect",
-                "return_url": f"https://t.me/{BOT_USERNAME}?start=payment_success"
-            },
-            "capture": True,
-            "description": data.description,
-            "metadata": {
-                "user_id": data.user_id,
-                "payment_type": data.payment_type
-            }
-        }, idempotence_key)
-        
-        # Сохраняем платёж в БД
-        await db.create_payment(
-            user_id=data.user_id,
-            payment_id=payment.id,
-            amount=data.amount,
-            payment_type=data.payment_type,
-            status="pending"
-        )
-        
-        logger.info(f"💳 Payment created: {payment.id} for user {data.user_id}")
-        
-        return {
-            "success": True,
-            "payment_id": payment.id,
-            "payment_url": payment.confirmation.confirmation_url,
-            "method": "yookassa"
-        }
-        
-    except Exception as e:
-        logger.error(f"Payment error: {e}")
-        # Fallback на бота
-        return {
-            "success": True,
-            "payment_url": f"https://t.me/{BOT_USERNAME}?start=donate_{int(data.amount)}",
-            "method": "bot",
-            "error": str(e)
-        }
 
 
 @app.post("/api/payment/webhook")
 async def payment_webhook(request: Request):
-    """Webhook от ЮКассы для подтверждения платежа"""
+    """Webhook от ЮКассы"""
     try:
         body = await request.json()
-        
         event = body.get("event")
         payment_data = body.get("object", {})
-        payment_id = payment_data.get("id")
-        status = payment_data.get("status")
         
-        logger.info(f"📩 Webhook: {event}, payment {payment_id}, status {status}")
-        
-        if event == "payment.succeeded" and status == "succeeded":
-            # Получаем метаданные
+        if event == "payment.succeeded":
+            payment_id = payment_data.get("id")
             metadata = payment_data.get("metadata", {})
             user_id = metadata.get("user_id")
-            payment_type = metadata.get("payment_type", "support")
             
             if user_id:
-                # Обновляем статус платежа
                 await db.update_payment_status(payment_id, "succeeded")
-                
-                # Если это поддержка — даём премиум
-                if payment_type == "support":
-                    await db.set_premium(int(user_id), days=30)
-                    logger.info(f"⭐ Premium activated for user {user_id}")
-                    
-                    # Отправляем уведомление пользователю
-                    if bot_instance:
-                        try:
-                            await bot_instance.send_message(
-                                int(user_id),
-                                "🎉 <b>Спасибо за поддержку!</b>\n\n"
-                                "Ваш платёж успешно обработан.\n"
-                                "Премиум-статус активирован на 30 дней! ⭐"
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to notify user: {e}")
+                await db.set_premium(int(user_id), days=30)
         
         return {"status": "ok"}
-        
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@app.get("/api/payment/check/{payment_id}")
-async def check_payment(payment_id: str):
-    """Проверить статус платежа"""
-    if not YOOKASSA_ENABLED:
-        return {"status": "unknown", "message": "YooKassa not configured"}
-    
-    try:
-        payment = Payment.find_one(payment_id)
-        return {
-            "status": payment.status,
-            "paid": payment.paid,
-            "amount": payment.amount.value
-        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -500,3 +470,4 @@ if __name__ == "__main__":
     import os
     port = int(os.getenv("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
