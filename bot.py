@@ -151,7 +151,7 @@ class PaymentCreate(BaseModel):
     user_id: int
     amount: float = 399
     payment_type: str = "support"
-    description: str = "Поддержка проекта SubTrack"
+    description: str = "Поддержка проекта SUBBY"
 
 
 @app.post("/api/payment/create")
@@ -219,7 +219,7 @@ async def create_payment_endpoint(data: PaymentCreate):
             }
     else:
         # ЮКасса не настроена — открываем бота
-        BOT_USERNAME = "SubTrack100_bot"  # Замените на username вашего бота
+        BOT_USERNAME = "ssubby_bot"  # Замените на username вашего бота
         return {
             "success": True,
             "payment_url": f"https://t.me/{BOT_USERNAME}?start=donate_{int(data.amount)}",
@@ -470,4 +470,5 @@ if __name__ == "__main__":
     import os
     port = int(os.getenv("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
