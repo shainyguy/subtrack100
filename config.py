@@ -4,6 +4,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_USERNAME = os.getenv("BOT_USERNAME", "ssubby_bot")
+
+# ЮКасса
+YOOKASSA_SHOP_ID = os.getenv("YOOKASSA_SHOP_ID")
+YOOKASSA_SECRET_KEY = os.getenv("YOOKASSA_SECRET_KEY")
+
+# Цены
+SUPPORT_PRICE = 399
 
 # Лимиты
 FREE_SUBS_LIMIT = 15
@@ -168,4 +176,5 @@ def get_cancel_instruction(name: str) -> dict:
             "Найдите Профиль или Настройки",
             "Раздел Подписка → Отменить"
         ]
+
     }
