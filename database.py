@@ -20,6 +20,20 @@ async def init_db():
                 last_visit DATE
             )
         """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                payment_id TEXT UNIQUE,
+                amount REAL NOT NULL,
+                payment_type TEXT DEFAULT 'support',
+                status TEXT DEFAULT 'pending',
+                created_at TEXT,
+                updated_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        """)
         
         await db.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (
@@ -471,3 +485,4 @@ async def get_or_create_user(user_id: int, username: str = None, first_name: str
     if not user:
         return await create_user(user_id, username, first_name)
     return user
+
