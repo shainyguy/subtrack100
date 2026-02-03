@@ -727,11 +727,44 @@
             haptic('medium');
         }
 
-        function supportProject() {
-            const url = 'https://t.me/SubTrack100_bot?start=donate';
-            if (tg) tg.openTelegramLink(url); else window.open(url, '_blank');
-            haptic('success');
+        async function supportProject() {
+    showToast('Создаём платёж...', 'success');
+    
+    try {
+        const res = await fetch(API + '/api/payment/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                amount: 399,
+                payment_type: 'support',
+                description: 'Поддержка проекта SUBBY'
+            })
+        });
+        
+        const data = await res.json();
+        console.log('Payment response:', data);
+        
+        if (data.success && data.payment_url) {
+            if (tg) {
+                tg.openLink(data.payment_url);
+            } else {
+                window.open(data.payment_url, '_blank');
+            }
+            showToast('Переход к оплате...', 'success');
+        } else {
+            showToast('Ошибка: ' + (data.error || 'неизвестная'), 'error');
         }
+    } catch (e) {
+        console.error('Payment error:', e);
+        // Fallback — открываем бота
+        const url = 'https://t.me/ssubby_bot?start=donate_399';
+        if (tg) tg.openTelegramLink(url);
+        else window.open(url, '_blank');
+    }
+    
+    haptic('success');
+}
 
         function exportData() {
             const data = { date: new Date().toISOString(), subscriptions: subs, trials: trials };
@@ -742,7 +775,7 @@
         }
 
         function openBot() {
-            const url = 'https://t.me/SubTrack100_bot';
+            const url = 'https://t.me/ssubby_bot';
             if (tg) tg.openTelegramLink(url); else window.open(url, '_blank');
         }
 
@@ -754,3 +787,4 @@
 </body>
 
 </html>
+
