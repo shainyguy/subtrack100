@@ -413,4 +413,61 @@ async def update_next_payment(sub_id: int):
     while next_date < today:
         next_date += timedelta(days=deltas.get(cycle, 30))
     
+
     await update_subscription(sub_id, next_payment=next_date.strftime("%Y-%m-%d"))
+
+
+async def create_user(user_id: int, username: str = None, first_name: str = None):
+    """Создать нового пользователя"""
+    async with aiosqlite.connect(DATABASE) as conn:
+        await conn.execute("""
+            INSERT OR IGNORE INTO users (user_id, username, first_name, created_at)
+            VALUES (?, ?, ?, datetime('now'))
+        """, (user_id, username, first_name or "Пользователь"))
+        await conn.commit()
+        
+        cursor = await conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+        row = await cursor.fetchone()
+        if row:
+            return dict(row)
+        return {"user_id": user_id, "first_name": first_name or "Пользователь"}
+
+
+async def create_payment(user_id: int, payment_id: str, amount: float, payment_type: str, status: str = "pending"):
+    """Создать запись о платеже"""
+    async with aiosqlite.connect(DATABASE) as conn:
+        await conn.execute("""
+            INSERT INTO payments (user_id, payment_id, amount, payment_type, status, created_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        """, (user_id, payment_id, amount, payment_type, status))
+        await conn.commit()
+
+
+async def update_payment_status(payment_id: str, status: str):
+    """Обновить статус платежа"""
+    async with aiosqlite.connect(DATABASE) as conn:
+        await conn.execute("""
+            UPDATE payments SET status = ?, updated_at = datetime('now')
+            WHERE payment_id = ?
+        """, (status, payment_id))
+        await conn.commit()
+
+
+async def set_premium(user_id: int, days: int = 30):
+    """Установить премиум статус"""
+    async with aiosqlite.connect(DATABASE) as conn:
+        await conn.execute("""
+            UPDATE users 
+            SET is_premium = 1, 
+                premium_until = datetime('now', '+' || ? || ' days')
+            WHERE user_id = ?
+        """, (days, user_id))
+        await conn.commit()
+
+
+async def get_or_create_user(user_id: int, username: str = None, first_name: str = None):
+    """Получить или создать пользователя"""
+    user = await get_user(user_id)
+    if not user:
+        return await create_user(user_id, username, first_name)
+    return user
