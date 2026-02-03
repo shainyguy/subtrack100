@@ -17,11 +17,13 @@ async def init_db():
                 notify_days INTEGER DEFAULT 1,
                 xp INTEGER DEFAULT 0,
                 total_saved REAL DEFAULT 0,
-                last_visit DATE
+                last_visit DATE,
+                is_premium INTEGER DEFAULT 0,
+                premium_until TEXT
             )
         """)
 
-        await conn.execute("""
+        await db.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -104,7 +106,7 @@ async def create_user(user_id: int, username: str = None, first_name: str = None
             VALUES (?, ?, ?, ?)
         """, (user_id, username, first_name, datetime.now().strftime("%Y-%m-%d")))
         await db.commit()
-    return await get_user(user_id)
+    return await get_user(user_id) or {"user_id": user_id, "first_name": first_name or "Пользователь"}
 
 
 async def get_or_create_user(user_id: int, username: str = None, first_name: str = None) -> dict:
@@ -124,7 +126,7 @@ async def get_or_create_user(user_id: int, username: str = None, first_name: str
 
 
 async def update_user(user_id: int, **kwargs):
-    allowed = ['notify_enabled', 'notify_days', 'xp', 'total_saved']
+    allowed = ['notify_enabled', 'notify_days', 'xp', 'total_saved', 'is_premium', 'premium_until']
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     
     if not updates:
@@ -148,6 +150,49 @@ async def add_saved(user_id: int, amount: float):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE users SET total_saved = total_saved + ? WHERE user_id = ?", (amount, user_id))
         await db.commit()
+
+
+async def set_premium(user_id: int, days: int = 30):
+    """Установить премиум статус"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        premium_until = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        await db.execute("""
+            UPDATE users 
+            SET is_premium = 1, premium_until = ?
+            WHERE user_id = ?
+        """, (premium_until, user_id))
+        await db.commit()
+
+
+# ========== PAYMENTS ==========
+
+async def create_payment(user_id: int, payment_id: str, amount: float, payment_type: str, status: str = "pending"):
+    """Создать запись о платеже"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO payments (user_id, payment_id, amount, payment_type, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, payment_id, amount, payment_type, status, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        await db.commit()
+
+
+async def update_payment_status(payment_id: str, status: str):
+    """Обновить статус платежа"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            UPDATE payments SET status = ?, updated_at = ?
+            WHERE payment_id = ?
+        """, (status, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), payment_id))
+        await db.commit()
+
+
+async def get_payment(payment_id: str) -> Optional[dict]:
+    """Получить платёж по ID"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM payments WHERE payment_id = ?", (payment_id,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
 
 
 # ========== SUBSCRIPTIONS ==========
@@ -352,9 +397,11 @@ async def get_stats(user_id: int) -> dict:
         "count": len(subs),
         "monthly": monthly,
         "yearly": round(monthly * 12, 2),
-        "daily": round(monthly / 30, 2),
+        "daily": round(monthly / 30, 2) if monthly > 0 else 0,
         "by_category": by_category,
         "most_expensive": most_expensive,
+        "total_monthly": monthly,
+        "total_saved": 0,
     }
 
 
@@ -427,62 +474,4 @@ async def update_next_payment(sub_id: int):
     while next_date < today:
         next_date += timedelta(days=deltas.get(cycle, 30))
     
-
     await update_subscription(sub_id, next_payment=next_date.strftime("%Y-%m-%d"))
-
-
-async def create_user(user_id: int, username: str = None, first_name: str = None):
-    """Создать нового пользователя"""
-    async with aiosqlite.connect(DATABASE) as conn:
-        await conn.execute("""
-            INSERT OR IGNORE INTO users (user_id, username, first_name, created_at)
-            VALUES (?, ?, ?, datetime('now'))
-        """, (user_id, username, first_name or "Пользователь"))
-        await conn.commit()
-        
-        cursor = await conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-        row = await cursor.fetchone()
-        if row:
-            return dict(row)
-        return {"user_id": user_id, "first_name": first_name or "Пользователь"}
-
-
-async def create_payment(user_id: int, payment_id: str, amount: float, payment_type: str, status: str = "pending"):
-    """Создать запись о платеже"""
-    async with aiosqlite.connect(DATABASE) as conn:
-        await conn.execute("""
-            INSERT INTO payments (user_id, payment_id, amount, payment_type, status, created_at)
-            VALUES (?, ?, ?, ?, ?, datetime('now'))
-        """, (user_id, payment_id, amount, payment_type, status))
-        await conn.commit()
-
-
-async def update_payment_status(payment_id: str, status: str):
-    """Обновить статус платежа"""
-    async with aiosqlite.connect(DATABASE) as conn:
-        await conn.execute("""
-            UPDATE payments SET status = ?, updated_at = datetime('now')
-            WHERE payment_id = ?
-        """, (status, payment_id))
-        await conn.commit()
-
-
-async def set_premium(user_id: int, days: int = 30):
-    """Установить премиум статус"""
-    async with aiosqlite.connect(DATABASE) as conn:
-        await conn.execute("""
-            UPDATE users 
-            SET is_premium = 1, 
-                premium_until = datetime('now', '+' || ? || ' days')
-            WHERE user_id = ?
-        """, (days, user_id))
-        await conn.commit()
-
-
-async def get_or_create_user(user_id: int, username: str = None, first_name: str = None):
-    """Получить или создать пользователя"""
-    user = await get_user(user_id)
-    if not user:
-        return await create_user(user_id, username, first_name)
-    return user
-
